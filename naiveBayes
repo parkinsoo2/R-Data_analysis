@@ -1,0 +1,59 @@
+# create a document-term sparse matrix
+sms_dtm=DocumentTermMatrix(sms_corpus_clean)
+
+# indicator features for frequent words
+sms_dict <- findFreqTerms(sms_dtm_train,5)
+sms_train <- sms_dtm_train[ ,sms_dict]
+sms_test <- sms_dtm_test[ ,sms_dict]
+
+# convert counts to a factor
+convert_counts <- function(x){
+  x <- ifelse(x > 0, "Yes", "No")
+  return(x)
+}
+
+# apply() convert_counts() to columns of train/test data
+sms_train <- apply(sms_train, MARGIN = 2, convert_counts)
+sms_test <- apply(sms_test, MARGIN = 2, convert_counts)
+
+# training a model on the data ----
+library(e1071)
+sms_classifier <- naiveBayes(sms_train, sms_raw_train$type)
+
+summary(sms_classifier)
+glimpse(sms_classifier)
+sms_test_pred=predict(sms_classifier, sms_test)
+sms_classifier$tables %>% head()
+spam_words <- lapply(sms_classifier$tables, function(x) {
+  if(x[2,2] >= 0.0001) {
+    word_prob <- x[2,2]
+    return(c(rownames(x)[2], word_prob))
+  } else {
+    return(NULL)
+  }
+})
+spam_words <- spam_words[!sapply(spam_words, is.null)]
+spam_words %>% as.data.frame() %>% t() %>% View()
+
+install.packages("purrr")
+library(purrr)
+library(dplyr)
+map(sms_classifier$tables, as.data.frame) %>% 
+  bind_rows(.id = "word") %>% 
+  filter(type == "No" & spam == 0) %>% 
+  select(-type, -spam)
+
+no_spam_words %>%  View()
+# evaluating model performance ----
+sms_test_pred
+sms_test[,1:50] %>% as.data.frame %>% skim()
+library(skimr)
+library(gmodels)
+CrossTable(sms_test_pred, sms_raw_test$type,
+#           prop.chisq = FALSE, prop.r = FALSE, prop.t = FALSE, 
+           dnn = c('predict', 'real'))
+
+sms_test[5,1:10]
+class(sms_test)
+Yes_matrix <- sms_test[rowSums(sms_test== "Yes") == ncol(sms_test),]
+no_matrix %>% datatable()
